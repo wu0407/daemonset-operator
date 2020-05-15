@@ -1,0 +1,7 @@
+apiVersion: ds.xiaoqing.com/v1alpha1
+kind: Xdaemonset
+metadata:
+  name: example-xdaemonset
+spec:
+  # Add fields here
+  size: 3
