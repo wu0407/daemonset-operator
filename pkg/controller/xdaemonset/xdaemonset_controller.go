@@ -4,7 +4,8 @@ import (
 	"context"
 
 	dsv1alpha1 "github.com/wu0407/daemonset-operator/pkg/apis/ds/v1alpha1"
-	corev1 "k8s.io/api/core/v1"
+	appsv1 "k8s.io/api/apps/v1"
+	//corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
@@ -17,6 +18,14 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/manager"
 	"sigs.k8s.io/controller-runtime/pkg/reconcile"
 	"sigs.k8s.io/controller-runtime/pkg/source"
+	"sigs.k8s.io/controller-runtime/pkg/predicate"
+	"sigs.k8s.io/controller-runtime/pkg/event"
+	"github.com/go-logr/logr"
+	//"time"
+)
+
+const (
+	finalizerName = "xdaemonset.xiaoqing.com"
 )
 
 var log = logf.Log.WithName("controller_xdaemonset")
@@ -45,15 +54,26 @@ func add(mgr manager.Manager, r reconcile.Reconciler) error {
 		return err
 	}
 
+	predic := predicate.Funcs{
+		UpdateFunc: func(e event.UpdateEvent) bool {
+		  // Ignore updates to CR status in which case metadata.Generation does not change
+		  return e.MetaOld.GetGeneration() != e.MetaNew.GetGeneration()
+		},
+		DeleteFunc: func(e event.DeleteEvent) bool {
+		  // Evaluates to false if the object has been confirmed deleted.
+		  return !e.DeleteStateUnknown
+		},
+	}
+
 	// Watch for changes to primary resource Xdaemonset
-	err = c.Watch(&source.Kind{Type: &dsv1alpha1.Xdaemonset{}}, &handler.EnqueueRequestForObject{})
+	err = c.Watch(&source.Kind{Type: &dsv1alpha1.Xdaemonset{}}, &handler.EnqueueRequestForObject{}, predic)
 	if err != nil {
 		return err
 	}
 
 	// TODO(user): Modify this to be the types you create that are owned by the primary resource
 	// Watch for changes to secondary resource Pods and requeue the owner Xdaemonset
-	err = c.Watch(&source.Kind{Type: &corev1.Pod{}}, &handler.EnqueueRequestForOwner{
+	err = c.Watch(&source.Kind{Type: &appsv1.DaemonSet{}}, &handler.EnqueueRequestForOwner{
 		IsController: true,
 		OwnerType:    &dsv1alpha1.Xdaemonset{},
 	})
@@ -76,7 +96,7 @@ type ReconcileXdaemonset struct {
 }
 
 // Reconcile reads that state of the cluster for a Xdaemonset object and makes changes based on the state read
-// and what is in the Xdaemonset.Spec
+// and what is in the Xdaemonset.Spec, handle add\update\del event, filter event use Predicate in add().
 // TODO(user): Modify this Reconcile function to implement your Controller logic.  This example creates
 // a Pod as an example
 // Note:
@@ -100,20 +120,50 @@ func (r *ReconcileXdaemonset) Reconcile(request reconcile.Request) (reconcile.Re
 		return reconcile.Result{}, err
 	}
 
-	// Define a new Pod object
-	pod := newPodForCR(instance)
+	// Check if the xdaemonset instance is marked to be deleted, which is
+	// indicated by the deletion timestamp being set.
+	isXdaemonSetMarkedToBeDeleted := instance.GetDeletionTimestamp() != nil
+	if isXdaemonSetMarkedToBeDeleted {
+		if contains(instance.GetFinalizers(), finalizerName) {
+			// Run finalization logic for finalizerName. If the
+			// finalization logic fails, don't remove the finalizer so
+			// that we can retry during the next reconciliation.
+			if err := r.finalizeXdaemonSet(reqLogger, instance); err != nil {
+				return reconcile.Result{}, err
+			}
+
+			// Remove finalizerName. Once all finalizers have been
+			// removed, the object will be deleted.
+			controllerutil.RemoveFinalizer(instance, finalizerName)
+			err := r.client.Update(context.TODO(), instance)
+			if err != nil {
+				return reconcile.Result{}, err
+			}
+		}
+		return reconcile.Result{}, nil
+	}
+
+	// Add finalizer for this CR
+	if !contains(instance.GetFinalizers(), finalizerName) {
+		if err := r.addFinalizer(reqLogger, instance); err != nil {
+			return reconcile.Result{}, err
+		}
+	}
+
+	// Define a new daemonset object
+	ds := newDaemonSetForCR(instance)
 
 	// Set Xdaemonset instance as the owner and controller
-	if err := controllerutil.SetControllerReference(instance, pod, r.scheme); err != nil {
+	if err := controllerutil.SetControllerReference(instance, ds, r.scheme); err != nil {
 		return reconcile.Result{}, err
 	}
 
-	// Check if this Pod already exists
-	found := &corev1.Pod{}
-	err = r.client.Get(context.TODO(), types.NamespacedName{Name: pod.Name, Namespace: pod.Namespace}, found)
+	// Check if this daemonset already exists
+	found := &appsv1.DaemonSet{}
+	err = r.client.Get(context.TODO(), types.NamespacedName{Name: ds.Name, Namespace: ds.Namespace}, found)
 	if err != nil && errors.IsNotFound(err) {
-		reqLogger.Info("Creating a new Pod", "Pod.Namespace", pod.Namespace, "Pod.Name", pod.Name)
-		err = r.client.Create(context.TODO(), pod)
+		reqLogger.Info("Creating a new Daemonset", "Daemonset.Namespace", ds.Namespace, "Daemonset.Name", ds.Name)
+		err = r.client.Create(context.TODO(), ds)
 		if err != nil {
 			return reconcile.Result{}, err
 		}
@@ -129,25 +179,50 @@ func (r *ReconcileXdaemonset) Reconcile(request reconcile.Request) (reconcile.Re
 	return reconcile.Result{}, nil
 }
 
-// newPodForCR returns a busybox pod with the same name/namespace as the cr
-func newPodForCR(cr *dsv1alpha1.Xdaemonset) *corev1.Pod {
-	labels := map[string]string{
-		"app": cr.Name,
-	}
-	return &corev1.Pod{
+// newDaemonSetForCR returns a DaemonSet with the same name/namespace as the cr
+func newDaemonSetForCR(cr *dsv1alpha1.Xdaemonset) *appsv1.DaemonSet {
+	labels := cr.Labels
+	//hash := time.Now().Format("060102150405")
+	//labels["pod-template-hash"] = hash
+
+	return &appsv1.DaemonSet{
 		ObjectMeta: metav1.ObjectMeta{
-			Name:      cr.Name + "-pod",
+		//	Name:      cr.Name + "-" + hash,
+			Name:      cr.Name + "-ds",
 			Namespace: cr.Namespace,
 			Labels:    labels,
 		},
-		Spec: corev1.PodSpec{
-			Containers: []corev1.Container{
-				{
-					Name:    "busybox",
-					Image:   "busybox",
-					Command: []string{"sleep", "3600"},
-				},
-			},
-		},
+		Spec: cr.Spec.DaemonSetSpec,
 	}
+}
+
+func (r *ReconcileXdaemonset) finalizeXdaemonSet(reqLogger logr.Logger, d *dsv1alpha1.Xdaemonset) error {
+	// TODO(user): Add the cleanup steps that the operator
+	// needs to do before the CR can be deleted. Examples
+	// of finalizers include performing backups and deleting
+	// resources that are not owned by this CR, like a PVC.
+	reqLogger.Info("Successfully finalized Xdeamonset")
+	return nil
+}
+
+func (r *ReconcileXdaemonset) addFinalizer(reqLogger logr.Logger, d *dsv1alpha1.Xdaemonset) error {
+	reqLogger.Info("Adding Finalizer for the Xdeamonset")
+	controllerutil.AddFinalizer(d, finalizerName)
+
+	// Update CR
+	err := r.client.Update(context.TODO(), d)
+	if err != nil {
+		reqLogger.Error(err, "Failed to update Xdeamonset with finalizer")
+		return err
+	}
+	return nil
+}
+
+func contains(list []string, s string) bool {
+	for _, v := range list {
+		if v == s {
+			return true
+		}
+	}
+	return false
 }
