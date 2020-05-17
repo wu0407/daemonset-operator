@@ -166,12 +166,14 @@ func (r *ReconcileXdaemonset) Reconcile(request reconcile.Request) (reconcile.Re
 
 		// Set Xdaemonset instance as the owner and controller
 		if err := controllerutil.SetControllerReference(instance, ds, r.scheme); err != nil {
+			reqLogger.Info("err in controllerutil.SetControllerReference(instance, ds, r.scheme) 0", err)
 			return reconcile.Result{}, err
 		}
 
 		reqLogger.Info("Creating a new Daemonset", "Daemonset.Namespace", ds.Namespace, "Daemonset.Name", ds.Name)
 		err = r.client.Create(context.TODO(), ds)
 		if err != nil {
+			reqLogger.Info("err in r.client.Create(context.TODO(), ds) 0", err)
 			return reconcile.Result{}, err
 		}
 		// daemonset created successfully - don't requeue
@@ -186,11 +188,13 @@ func (r *ReconcileXdaemonset) Reconcile(request reconcile.Request) (reconcile.Re
 		newds := newDaemonSetForCR(instance)
 		// Set Xdaemonset instance as the owner and controller
 		if err := controllerutil.SetControllerReference(instance, newds, r.scheme); err != nil {
+			reqLogger.Info("err in controllerutil.SetControllerReference", err)
 			return reconcile.Result{}, err
 		}
 		reqLogger.Info("Creating a new Daemonset", "Daemonset.Namespace", instance.Namespace, "Daemonset.Name", instance.Name)
 		err = r.client.Create(context.TODO(), newds)
 		if err != nil {
+			reqLogger.Info("err in r.client.Create(context.TODO(), newds)", err)
 			return reconcile.Result{}, err
 		}
 		return reconcile.Result{Requeue: true}, nil
@@ -203,6 +207,7 @@ func (r *ReconcileXdaemonset) Reconcile(request reconcile.Request) (reconcile.Re
 			//delete old daemonset
 			err = r.client.Delete(context.TODO(), &dss[leng - 2])
 			if err != nil {
+				reqLogger.Info("err in r.client.Delete(context.TODO(), &dss[leng - 2])", err)
 				return reconcile.Result{}, err
 			}
 			return reconcile.Result{}, nil
