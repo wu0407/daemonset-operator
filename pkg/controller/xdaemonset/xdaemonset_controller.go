@@ -1,6 +1,9 @@
 package xdaemonset
 
 import (
+	"sort"
+	"strconv"
+	"reflect"
 	"context"
 
 	dsv1alpha1 "github.com/wu0407/daemonset-operator/pkg/apis/ds/v1alpha1"
@@ -9,7 +12,7 @@ import (
 	"k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
-	"k8s.io/apimachinery/pkg/types"
+	//"k8s.io/apimachinery/pkg/types"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/controller"
 	"sigs.k8s.io/controller-runtime/pkg/controller/controllerutil"
@@ -21,7 +24,7 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/predicate"
 	"sigs.k8s.io/controller-runtime/pkg/event"
 	"github.com/go-logr/logr"
-	//"time"
+	"time"
 )
 
 const (
@@ -150,45 +153,75 @@ func (r *ReconcileXdaemonset) Reconcile(request reconcile.Request) (reconcile.Re
 		}
 	}
 
-	// Define a new daemonset object
-	ds := newDaemonSetForCR(instance)
-
-	// Set Xdaemonset instance as the owner and controller
-	if err := controllerutil.SetControllerReference(instance, ds, r.scheme); err != nil {
+	dsList, err := r.getDaemonsetList(instance)
+	if err != nil {
 		return reconcile.Result{}, err
 	}
 
-	// Check if this daemonset already exists
-	found := &appsv1.DaemonSet{}
-	err = r.client.Get(context.TODO(), types.NamespacedName{Name: ds.Name, Namespace: ds.Namespace}, found)
-	if err != nil && errors.IsNotFound(err) {
+	leng := len(dsList.Items)
+	switch  {
+	case leng == 0:
+		// Define a new daemonset object
+		ds := newDaemonSetForCR(instance)
+
+		// Set Xdaemonset instance as the owner and controller
+		if err := controllerutil.SetControllerReference(instance, ds, r.scheme); err != nil {
+			return reconcile.Result{}, err
+		}
+
 		reqLogger.Info("Creating a new Daemonset", "Daemonset.Namespace", ds.Namespace, "Daemonset.Name", ds.Name)
 		err = r.client.Create(context.TODO(), ds)
 		if err != nil {
 			return reconcile.Result{}, err
 		}
-
-		// Pod created successfully - don't requeue
+		// daemonset created successfully - don't requeue
 		return reconcile.Result{}, nil
-	} else if err != nil {
-		return reconcile.Result{}, err
-	}
+	case leng == 1:
+		// daemonset already exists and spec not change - don't requeue
+		if reflect.DeepEqual(dsList.Items[0].Spec, instance.Spec.DaemonSetSpec) {
+			return reconcile.Result{}, nil
+		}
 
-	// Pod already exists - don't requeue
-	reqLogger.Info("Skip reconcile: Pod already exists", "Pod.Namespace", found.Namespace, "Pod.Name", found.Name)
-	return reconcile.Result{}, nil
+		//daemonset spec change, create new daemonset, next delete old daemonset 
+		newds := newDaemonSetForCR(instance)
+		// Set Xdaemonset instance as the owner and controller
+		if err := controllerutil.SetControllerReference(instance, newds, r.scheme); err != nil {
+			return reconcile.Result{}, err
+		}
+		reqLogger.Info("Creating a new Daemonset", "Daemonset.Namespace", instance.Namespace, "Daemonset.Name", instance.Name)
+		err = r.client.Create(context.TODO(), newds)
+		if err != nil {
+			return reconcile.Result{}, err
+		}
+		return reconcile.Result{Requeue: true}, nil
+	default:
+		var dss dsslicetype
+		dss = dsList.Items
+		sort.Sort(dss)
+		//new daemonset is ready
+		if dss[leng - 1].Status.NumberReady == dss[leng - 1].Status.DesiredNumberScheduled && dss[leng - 1].Status.DesiredNumberScheduled == dss[leng - 1].Status.CurrentNumberScheduled {
+			//delete old daemonset
+			err = r.client.Delete(context.TODO(), &dss[leng - 2])
+			if err != nil {
+				return reconcile.Result{}, err
+			}
+			return reconcile.Result{}, nil
+		}
+		return reconcile.Result{Requeue: true}, nil
+	}
+	
 }
 
 // newDaemonSetForCR returns a DaemonSet with the same name/namespace as the cr
 func newDaemonSetForCR(cr *dsv1alpha1.Xdaemonset) *appsv1.DaemonSet {
 	labels := cr.Labels
-	//hash := time.Now().Format("060102150405")
-	//labels["pod-template-hash"] = hash
+	hash := time.Now().Format("060102150405")
+	labels["pod-template-hash"] = hash
 
 	return &appsv1.DaemonSet{
 		ObjectMeta: metav1.ObjectMeta{
-		//	Name:      cr.Name + "-" + hash,
-			Name:      cr.Name + "-ds",
+			Name:      cr.Name + "-" + hash,
+		//	Name:      cr.Name + "-ds",
 			Namespace: cr.Namespace,
 			Labels:    labels,
 		},
@@ -225,4 +258,33 @@ func contains(list []string, s string) bool {
 		}
 	}
 	return false
+}
+
+//getDaemonset return  owner by Xdaemonset  daemonset list
+func (r *ReconcileXdaemonset) getDaemonsetList(d *dsv1alpha1.Xdaemonset) (dslist *appsv1.DaemonSetList, err error) {
+	daemonsetSelector, err := metav1.LabelSelectorAsSelector(d.Spec.Selector)
+	if err != nil {
+		return nil, err
+	}
+
+	//todo filter by metadata.ownerReferences
+	err = r.client.List(context.TODO(), dslist, &client.ListOptions{
+		Namespace: d.Namespace,
+		LabelSelector: daemonsetSelector,
+	})
+	if err != nil {
+		return nil, err
+	}
+
+	return dslist, nil
+}
+
+type dsslicetype []appsv1.DaemonSet
+
+func (a dsslicetype) Len() int           { return len(a) }
+func (a dsslicetype) Swap(i, j int)      { a[i], a[j] = a[j], a[i] }
+func (a dsslicetype) Less(i, j int) bool {
+	timei, _ := strconv.Atoi(a[i].CreationTimestamp.Time.Format("20060102150405"))
+	timej, _ := strconv.Atoi(a[j].CreationTimestamp.Time.Format("20060102150405")) 
+	return timei < timej
 }
