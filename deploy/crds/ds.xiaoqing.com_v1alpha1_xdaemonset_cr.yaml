@@ -3,5 +3,60 @@ kind: Xdaemonset
 metadata:
   name: example-xdaemonset
 spec:
-  # Add fields here
-  size: 3
+  selector:
+    matchLabels:
+      bu: cloud
+      env: test
+      project: cloud_infra
+      app: nginx
+      revision: "1"
+  updateStrategy:
+    type: RollingUpdate
+    rollingUpdate:
+      maxUnavailable: 1
+  template:
+    metadata:
+      labels:
+        bu: cloud
+        env: test
+        project: cloud_infra
+        app: nginx
+        revision: "1"
+    spec:
+      nodeSelector:
+        beta.kubernetes.io/os: linux
+      #hostNetwork: true
+      containers:
+        - name: main-container
+          image: nginx:1.17
+          resources:
+            limits:
+              memory: 100Mi
+              #cpu: 1
+            requests:
+              memory: 100Mi
+              #cpu: 2
+          volumeMounts:
+            - mountPath: /etc/localtime
+              name: volume-main-3
+          env:
+            - name: HOSTNAME
+              valueFrom:
+                fieldRef:
+                  fieldPath: spec.nodeName
+            - name: JAEGER_AGENT_HOST
+              value: 127.0.0.1
+            - name: MODULE
+              value: cn_test_token_proxy_in_k8s
+            - name: INTERNAL_IP
+              valueFrom:
+                fieldRef:
+                  fieldPath: status.hostIP
+          terminationMessagePolicy: FallbackToLogsOnError
+      volumes:
+        - name: volume-main-3
+          hostPath:
+            path: /etc/localtime
+      dnsPolicy: Default
+      enableServiceLinks: false
+      automountServiceAccountToken: false

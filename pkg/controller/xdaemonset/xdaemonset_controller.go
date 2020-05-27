@@ -1,9 +1,10 @@
 package xdaemonset
 
 import (
+	"fmt"
 	"sort"
 	"strconv"
-	"reflect"
+	//"reflect"
 	"context"
 
 	dsv1alpha1 "github.com/wu0407/daemonset-operator/pkg/apis/ds/v1alpha1"
@@ -25,6 +26,7 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/event"
 	"github.com/go-logr/logr"
 	"time"
+	apiequality "k8s.io/apimachinery/pkg/api/equality"
 )
 
 const (
@@ -166,21 +168,22 @@ func (r *ReconcileXdaemonset) Reconcile(request reconcile.Request) (reconcile.Re
 
 		// Set Xdaemonset instance as the owner and controller
 		if err := controllerutil.SetControllerReference(instance, ds, r.scheme); err != nil {
-			reqLogger.Info("err in controllerutil.SetControllerReference(instance, ds, r.scheme) 0", err)
+			reqLogger.Error(err, "err in controllerutil.SetControllerReference(instance, ds, r.scheme) 0")
 			return reconcile.Result{}, err
 		}
 
 		reqLogger.Info("Creating a new Daemonset", "Daemonset.Namespace", ds.Namespace, "Daemonset.Name", ds.Name)
 		err = r.client.Create(context.TODO(), ds)
 		if err != nil {
-			reqLogger.Info("err in r.client.Create(context.TODO(), ds) 0", err)
+			reqLogger.Error(err, "err in r.client.Create(context.TODO(), ds) 0")
 			return reconcile.Result{}, err
 		}
 		// daemonset created successfully - don't requeue
 		return reconcile.Result{}, nil
 	case leng == 1:
 		// daemonset already exists and spec not change - don't requeue
-		if reflect.DeepEqual(dsList.Items[0].Spec, instance.Spec.DaemonSetSpec) {
+		if apiequality.Semantic.DeepEqual(dsList.Items[0].Spec, instance.Spec.DaemonSetSpec) {
+			fmt.Println("not equal")
 			return reconcile.Result{}, nil
 		}
 
@@ -188,13 +191,13 @@ func (r *ReconcileXdaemonset) Reconcile(request reconcile.Request) (reconcile.Re
 		newds := newDaemonSetForCR(instance)
 		// Set Xdaemonset instance as the owner and controller
 		if err := controllerutil.SetControllerReference(instance, newds, r.scheme); err != nil {
-			reqLogger.Info("err in controllerutil.SetControllerReference", err)
+			reqLogger.Error(err, "err in controllerutil.SetControllerReference")
 			return reconcile.Result{}, err
 		}
-		reqLogger.Info("Creating a new Daemonset", "Daemonset.Namespace", instance.Namespace, "Daemonset.Name", instance.Name)
+		reqLogger.Info("Creating a new Daemonset", "Daemonset.Namespace", newds.Namespace, "Daemonset.Name", newds.Name)
 		err = r.client.Create(context.TODO(), newds)
 		if err != nil {
-			reqLogger.Info("err in r.client.Create(context.TODO(), newds)", err)
+			reqLogger.Error(err, "err in r.client.Create(context.TODO(), newds)")
 			return reconcile.Result{}, err
 		}
 		return reconcile.Result{Requeue: true}, nil
@@ -207,7 +210,7 @@ func (r *ReconcileXdaemonset) Reconcile(request reconcile.Request) (reconcile.Re
 			//delete old daemonset
 			err = r.client.Delete(context.TODO(), &dss[leng - 2])
 			if err != nil {
-				reqLogger.Info("err in r.client.Delete(context.TODO(), &dss[leng - 2])", err)
+				reqLogger.Error(err, "err in r.client.Delete(context.TODO(), &dss[leng - 2])")
 				return reconcile.Result{}, err
 			}
 			return reconcile.Result{}, nil
@@ -219,7 +222,10 @@ func (r *ReconcileXdaemonset) Reconcile(request reconcile.Request) (reconcile.Re
 
 // newDaemonSetForCR returns a DaemonSet with the same name/namespace as the cr
 func newDaemonSetForCR(cr *dsv1alpha1.Xdaemonset) *appsv1.DaemonSet {
-	labels := cr.Labels
+	labels := make(map[string]string)
+	for key, value := range cr.Spec.Template.GetLabels() {
+		labels[key] = value
+	}
 	hash := time.Now().Format("060102150405")
 	labels["pod-template-hash"] = hash
 
@@ -273,15 +279,16 @@ func (r *ReconcileXdaemonset) getDaemonsetList(d *dsv1alpha1.Xdaemonset) (dslist
 	}
 
 	//todo filter by metadata.ownerReferences
+	//listOpts := []client.ListOption{
+	//	client.InNamespace(d.Namespace),
+	//	client.MatchingLabels(d.Spec.Selector.MatchLabels),
+	//}
+	//err = r.client.List(context.TODO(), dslist, listOpts...)
 	err = r.client.List(context.TODO(), dslist, &client.ListOptions{
 		Namespace: d.Namespace,
 		LabelSelector: daemonsetSelector,
 	})
-	if err != nil {
-		return nil, err
-	}
-
-	return dslist, nil
+	return dslist, err
 }
 
 type dsslicetype []appsv1.DaemonSet
