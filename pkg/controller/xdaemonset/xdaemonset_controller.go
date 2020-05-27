@@ -161,7 +161,7 @@ func (r *ReconcileXdaemonset) Reconcile(request reconcile.Request) (reconcile.Re
 	}
 
 	if dsList == nil {
-		return reconcile.Result{}, err
+		return reconcile.Result{}, nil
 	}
 
 	leng := len(dsList.Items)
