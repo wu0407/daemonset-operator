@@ -187,7 +187,7 @@ func (r *ReconcileXdaemonset) Reconcile(request reconcile.Request) (reconcile.Re
 	case leng == 1:
 		// daemonset already exists and spec not change - don't requeue
 		if apiequality.Semantic.DeepEqual(dsList.Items[0].Spec, instance.Spec.DaemonSetSpec) {
-			fmt.Println("not equal")
+			fmt.Println("equal")
 			return reconcile.Result{}, nil
 		}
 
@@ -288,6 +288,7 @@ func (r *ReconcileXdaemonset) getDaemonsetList(d *dsv1alpha1.Xdaemonset) (dslist
 	//	client.MatchingLabels(d.Spec.Selector.MatchLabels),
 	//}
 	//err = r.client.List(context.TODO(), dslist, listOpts...)
+	dslist = &appsv1.DaemonSetList{}
 	err = r.client.List(context.TODO(), dslist, &client.ListOptions{
 		Namespace: d.Namespace,
 		LabelSelector: daemonsetSelector,
@@ -300,7 +301,12 @@ type dsslicetype []appsv1.DaemonSet
 func (a dsslicetype) Len() int           { return len(a) }
 func (a dsslicetype) Swap(i, j int)      { a[i], a[j] = a[j], a[i] }
 func (a dsslicetype) Less(i, j int) bool {
-	timei, _ := strconv.Atoi(a[i].CreationTimestamp.Time.Format("20060102150405"))
-	timej, _ := strconv.Atoi(a[j].CreationTimestamp.Time.Format("20060102150405")) 
-	return timei < timej
+	if a[i].CreationTimestamp.Equal(&a[j].CreationTimestamp) {
+		return a[i].Name < a[j].Name
+	}
+	return a[i].CreationTimestamp.Before(&a[j].CreationTimestamp)
+	
+	//timei, _ := strconv.Atoi(a[i].CreationTimestamp.Time.Format("20060102150405"))
+	//timej, _ := strconv.Atoi(a[j].CreationTimestamp.Time.Format("20060102150405"))
+	//return timei < timej
 }
