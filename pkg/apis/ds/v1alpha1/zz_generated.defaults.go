@@ -22,7 +22,7 @@ package v1alpha1
 
 import (
 	runtime "k8s.io/apimachinery/pkg/runtime"
-	appsv1 "k8s.io/api/apps/v1"
+	//appsv1 "k8s.io/api/apps/v1"
 	//corev1 "k8s.io/kubernetes/pkg/apis/core/v1"
 )
 
