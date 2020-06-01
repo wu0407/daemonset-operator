@@ -125,6 +125,7 @@ func (r *ReconcileXdaemonset) Reconcile(request reconcile.Request) (reconcile.Re
 		return reconcile.Result{}, err
 	}
 
+	r.scheme.Default(instance)
 	// Check if the xdaemonset instance is marked to be deleted, which is
 	// indicated by the deletion timestamp being set.
 	isXdaemonSetMarkedToBeDeleted := instance.GetDeletionTimestamp() != nil
