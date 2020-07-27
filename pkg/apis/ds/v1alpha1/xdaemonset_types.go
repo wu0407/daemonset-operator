@@ -1,8 +1,8 @@
 package v1alpha1
 
 import (
+	appsv1 "k8s.io/api/apps/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
-        appsv1 "k8s.io/api/apps/v1"
 )
 
 // EDIT THIS FILE!  THIS IS SCAFFOLDING FOR YOU TO OWN!
@@ -13,7 +13,7 @@ type XdaemonsetSpec struct {
 	// INSERT ADDITIONAL SPEC FIELDS - desired state of cluster
 	// Important: Run "operator-sdk generate k8s" to regenerate code after modifying this file
 	// Add custom validation using kubebuilder tags: https://book-v1.book.kubebuilder.io/beyond_basics/generating_crd.html
-        appsv1.DaemonSetSpec `json:",inline"`
+	appsv1.DaemonSetSpec `json:",inline"`
 }
 
 // XdaemonsetStatus defines the observed state of Xdaemonset
@@ -24,36 +24,35 @@ type XdaemonsetStatus struct {
 
 	// The number of nodes that are running at least 1
 	// daemon pod and are supposed to run the daemon pod.
-	CurrentNumberScheduled int32
+	CurrentNumberScheduled int32 `json:"currentNumberScheduled"`
 
 	// The number of nodes that are running the daemon pod, but are
 	// not supposed to run the daemon pod.
-	NumberMisscheduled int32
+	NumberMisscheduled int32 `json:"numberMisscheduled"`
 
 	// The total number of nodes that should be running the daemon
 	// pod (including nodes correctly running the daemon pod).
-	DesiredNumberScheduled int32
+	DesiredNumberScheduled int32 `json:"desiredNumberScheduled"`
 
 	// The number of nodes that should be running the daemon pod and have one
 	// or more of the daemon pod running and ready.
-	NumberReady int32
+	NumberReady int32 `json:"numberReady"`
 
 	// The total number of nodes that are running updated daemon pod
 	// +optional
-	UpdatedNumberScheduled int32
+	UpdatedNumberScheduled int32 `json:"updatedNumberScheduled,omitempty"`
 
 	// The number of nodes that should be running the
 	// daemon pod and have one or more of the daemon pod running and
 	// available (ready for at least spec.minReadySeconds)
 	// +optional
-	NumberAvailable int32
+	NumberAvailable int32 `json:"numberAvailable,omitempty"`
 
 	// The number of nodes that should be running the
 	// daemon pod and have none of the daemon pod running and available
 	// (ready for at least spec.minReadySeconds)
 	// +optional
-	NumberUnavailable int32
-
+	NumberUnavailable int32 `json:"numberUnavailable,omitempty"`
 }
 
 // +k8s:deepcopy-gen:interfaces=k8s.io/apimachinery/pkg/runtime.Object
