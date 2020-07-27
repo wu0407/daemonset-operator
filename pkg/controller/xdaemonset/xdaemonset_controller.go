@@ -3,30 +3,34 @@ package xdaemonset
 import (
 	"fmt"
 	"sort"
+
 	//"strconv"
-	//"reflect"
 	"context"
+	"reflect"
 
 	dsv1alpha1 "github.com/wu0407/daemonset-operator/pkg/apis/ds/v1alpha1"
 	appsv1 "k8s.io/api/apps/v1"
+
 	//corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
+
 	//"k8s.io/apimachinery/pkg/types"
+	"time"
+
+	"github.com/go-logr/logr"
+	apiequality "k8s.io/apimachinery/pkg/api/equality"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/controller"
 	"sigs.k8s.io/controller-runtime/pkg/controller/controllerutil"
+	"sigs.k8s.io/controller-runtime/pkg/event"
 	"sigs.k8s.io/controller-runtime/pkg/handler"
 	logf "sigs.k8s.io/controller-runtime/pkg/log"
 	"sigs.k8s.io/controller-runtime/pkg/manager"
+	"sigs.k8s.io/controller-runtime/pkg/predicate"
 	"sigs.k8s.io/controller-runtime/pkg/reconcile"
 	"sigs.k8s.io/controller-runtime/pkg/source"
-	"sigs.k8s.io/controller-runtime/pkg/predicate"
-	"sigs.k8s.io/controller-runtime/pkg/event"
-	"github.com/go-logr/logr"
-	"time"
-	apiequality "k8s.io/apimachinery/pkg/api/equality"
 )
 
 const (
@@ -61,12 +65,12 @@ func add(mgr manager.Manager, r reconcile.Reconciler) error {
 
 	predic := predicate.Funcs{
 		UpdateFunc: func(e event.UpdateEvent) bool {
-		  // Ignore updates to CR status in which case metadata.Generation does not change
-		  return e.MetaOld.GetGeneration() != e.MetaNew.GetGeneration()
+			// Ignore updates to CR status in which case metadata.Generation does not change
+			return e.MetaOld.GetGeneration() != e.MetaNew.GetGeneration()
 		},
 		DeleteFunc: func(e event.DeleteEvent) bool {
-		  // Evaluates to false if the object has been confirmed deleted.
-		  return !e.DeleteStateUnknown
+			// Evaluates to false if the object has been confirmed deleted.
+			return !e.DeleteStateUnknown
 		},
 	}
 
@@ -166,7 +170,7 @@ func (r *ReconcileXdaemonset) Reconcile(request reconcile.Request) (reconcile.Re
 	}
 
 	leng := len(dsList.Items)
-	switch  {
+	switch {
 	case leng == 0:
 		// Define a new daemonset object
 		ds := newDaemonSetForCR(instance)
@@ -183,6 +187,11 @@ func (r *ReconcileXdaemonset) Reconcile(request reconcile.Request) (reconcile.Re
 			reqLogger.Error(err, "err in r.client.Create(context.TODO(), ds) 0")
 			return reconcile.Result{}, err
 		}
+
+		err = r.syncXdaemonsetStatus(instance)
+		if err != nil {
+			return reconcile.Result{}, err
+		}
 		// daemonset created successfully - don't requeue
 		return reconcile.Result{}, nil
 	case leng == 1:
@@ -192,7 +201,7 @@ func (r *ReconcileXdaemonset) Reconcile(request reconcile.Request) (reconcile.Re
 			return reconcile.Result{}, nil
 		}
 
-		//daemonset spec change, create new daemonset, next delete old daemonset 
+		//daemonset spec change, create new daemonset, next delete old daemonset
 		newds := newDaemonSetForCR(instance)
 		// Set Xdaemonset instance as the owner and controller
 		if err := controllerutil.SetControllerReference(instance, newds, r.scheme); err != nil {
@@ -205,24 +214,39 @@ func (r *ReconcileXdaemonset) Reconcile(request reconcile.Request) (reconcile.Re
 			reqLogger.Error(err, "err in r.client.Create(context.TODO(), newds)")
 			return reconcile.Result{}, err
 		}
+
+		err = r.syncXdaemonsetStatus(instance)
+		if err != nil {
+			return reconcile.Result{}, err
+		}
 		return reconcile.Result{Requeue: true}, nil
 	default:
 		var dss dsslicetype
 		dss = dsList.Items
 		sort.Sort(dss)
 		//new daemonset is ready
-		if dss[leng - 1].Status.NumberReady == dss[leng - 1].Status.DesiredNumberScheduled && dss[leng - 1].Status.DesiredNumberScheduled == dss[leng - 1].Status.CurrentNumberScheduled {
+		if dss[leng-1].Status.NumberReady == dss[leng-1].Status.DesiredNumberScheduled && dss[leng-1].Status.DesiredNumberScheduled == dss[leng-1].Status.CurrentNumberScheduled {
 			//delete old daemonset
-			err = r.client.Delete(context.TODO(), &dss[leng - 2])
+			err = r.client.Delete(context.TODO(), &dss[leng-2])
 			if err != nil {
 				reqLogger.Error(err, "err in r.client.Delete(context.TODO(), &dss[leng - 2])")
 				return reconcile.Result{}, err
 			}
+
+			err = r.syncXdaemonsetStatus(instance)
+			if err != nil {
+				return reconcile.Result{}, err
+			}
 			return reconcile.Result{}, nil
+		}
+
+		err = r.syncXdaemonsetStatus(instance)
+		if err != nil {
+			return reconcile.Result{}, err
 		}
 		return reconcile.Result{Requeue: true}, nil
 	}
-	
+
 }
 
 // newDaemonSetForCR returns a DaemonSet with the same name/namespace as the cr
@@ -236,8 +260,8 @@ func newDaemonSetForCR(cr *dsv1alpha1.Xdaemonset) *appsv1.DaemonSet {
 
 	return &appsv1.DaemonSet{
 		ObjectMeta: metav1.ObjectMeta{
-			Name:      cr.Name + "-" + hash,
-		//	Name:      cr.Name + "-ds",
+			Name: cr.Name + "-" + hash,
+			//	Name:      cr.Name + "-ds",
 			Namespace: cr.Namespace,
 			Labels:    labels,
 		},
@@ -291,7 +315,7 @@ func (r *ReconcileXdaemonset) getDaemonsetList(d *dsv1alpha1.Xdaemonset) (dslist
 	//err = r.client.List(context.TODO(), dslist, listOpts...)
 	dslist = &appsv1.DaemonSetList{}
 	err = r.client.List(context.TODO(), dslist, &client.ListOptions{
-		Namespace: d.Namespace,
+		Namespace:     d.Namespace,
 		LabelSelector: daemonsetSelector,
 	})
 	return dslist, err
@@ -299,15 +323,151 @@ func (r *ReconcileXdaemonset) getDaemonsetList(d *dsv1alpha1.Xdaemonset) (dslist
 
 type dsslicetype []appsv1.DaemonSet
 
-func (a dsslicetype) Len() int           { return len(a) }
-func (a dsslicetype) Swap(i, j int)      { a[i], a[j] = a[j], a[i] }
+func (a dsslicetype) Len() int      { return len(a) }
+func (a dsslicetype) Swap(i, j int) { a[i], a[j] = a[j], a[i] }
 func (a dsslicetype) Less(i, j int) bool {
 	if a[i].CreationTimestamp.Equal(&a[j].CreationTimestamp) {
 		return a[i].Name < a[j].Name
 	}
 	return a[i].CreationTimestamp.Before(&a[j].CreationTimestamp)
-	
+
 	//timei, _ := strconv.Atoi(a[i].CreationTimestamp.Time.Format("20060102150405"))
 	//timej, _ := strconv.Atoi(a[j].CreationTimestamp.Time.Format("20060102150405"))
 	//return timei < timej
+}
+
+//caculateStatus result of status
+func caculateStatus(alldss []appsv1.DaemonSet) *dsv1alpha1.XdaemonsetStatus {
+	DesiredNumberScheduled := getAllDesiredNumberScheduled(alldss)
+	CurrentNumberScheduled := getAllCurrentNumberScheduled(alldss)
+	NumberMisscheduled := getAllNumberMisscheduled(alldss)
+	NumberReady := getAllNumberReady(alldss)
+	UpdatedNumberScheduled := getAllUpdatedNumberScheduled(alldss)
+	NumberAvailable := getAllNumberAvailable(alldss)
+	NumberUnavailable := getAllNumberUnavailable(alldss)
+
+	return &dsv1alpha1.XdaemonsetStatus{
+		DesiredNumberScheduled: DesiredNumberScheduled,
+		CurrentNumberScheduled: CurrentNumberScheduled,
+		NumberMisscheduled:     NumberMisscheduled,
+		NumberReady:            NumberReady,
+		UpdatedNumberScheduled: UpdatedNumberScheduled,
+		NumberAvailable:        NumberAvailable,
+		NumberUnavailable:      NumberUnavailable,
+	}
+}
+
+//syncXdaemonsetStatus sync Xdaemonset status
+func (r *ReconcileXdaemonset) syncXdaemonsetStatus(d *dsv1alpha1.Xdaemonset) error {
+	list, err := r.getDaemonsetList(d)
+	if err != nil {
+		return err
+	}
+
+	alldss := list.Items
+	newStatus := *caculateStatus(alldss)
+
+	if reflect.DeepEqual(d.Status, newStatus) {
+		return nil
+	}
+	//update status
+	return r.client.Status().Update(context.TODO(), d)
+}
+
+//getAllDesiredNumberScheduled count all Daemonset DesiredNumberScheduled
+func getAllDesiredNumberScheduled(alldss []appsv1.DaemonSet) int32 {
+	var count int32
+	if alldss == nil {
+		return count
+	}
+
+	for _, ds := range alldss {
+		count += ds.Status.DesiredNumberScheduled
+	}
+
+	return count
+}
+
+//getAllCurrentNumberScheduled count all Daemonset NumberScheduled
+func getAllCurrentNumberScheduled(alldss []appsv1.DaemonSet) int32 {
+	var count int32
+	if alldss == nil {
+		return count
+	}
+
+	for _, ds := range alldss {
+		count += ds.Status.CurrentNumberScheduled
+	}
+
+	return count
+}
+
+//getAllNumberMisscheduled count all Daemonset NumberMisscheduled
+func getAllNumberMisscheduled(alldss []appsv1.DaemonSet) int32 {
+	var count int32
+	if alldss == nil {
+		return count
+	}
+
+	for _, ds := range alldss {
+		count += ds.Status.NumberMisscheduled
+	}
+
+	return count
+}
+
+//getAllNumberReady count all Daemonset NumberReady
+func getAllNumberReady(alldss []appsv1.DaemonSet) int32 {
+	var count int32
+	if alldss == nil {
+		return count
+	}
+
+	for _, ds := range alldss {
+		count += ds.Status.NumberReady
+	}
+
+	return count
+}
+
+//getAllUpdatedNumberScheduled count all Daemonset UpdatedNumberScheduled
+func getAllUpdatedNumberScheduled(alldss []appsv1.DaemonSet) int32 {
+	var count int32
+	if alldss == nil {
+		return count
+	}
+
+	for _, ds := range alldss {
+		count += ds.Status.UpdatedNumberScheduled
+	}
+
+	return count
+}
+
+//getAllNumberAvailable count all Daemonset NumberAvailable
+func getAllNumberAvailable(alldss []appsv1.DaemonSet) int32 {
+	var count int32
+	if alldss == nil {
+		return count
+	}
+
+	for _, ds := range alldss {
+		count += ds.Status.NumberAvailable
+	}
+
+	return count
+}
+
+//getAllNumberUnavailable count all Daemonset NumberUnavailable
+func getAllNumberUnavailable(alldss []appsv1.DaemonSet) int32 {
+	var count int32
+	if alldss == nil {
+		return count
+	}
+
+	for _, ds := range alldss {
+		count += ds.Status.NumberUnavailable
+	}
+
+	return count
 }

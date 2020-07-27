@@ -21,6 +21,39 @@ type XdaemonsetStatus struct {
 	// INSERT ADDITIONAL STATUS FIELD - define observed state of cluster
 	// Important: Run "operator-sdk generate k8s" to regenerate code after modifying this file
 	// Add custom validation using kubebuilder tags: https://book-v1.book.kubebuilder.io/beyond_basics/generating_crd.html
+
+	// The number of nodes that are running at least 1
+	// daemon pod and are supposed to run the daemon pod.
+	CurrentNumberScheduled int32
+
+	// The number of nodes that are running the daemon pod, but are
+	// not supposed to run the daemon pod.
+	NumberMisscheduled int32
+
+	// The total number of nodes that should be running the daemon
+	// pod (including nodes correctly running the daemon pod).
+	DesiredNumberScheduled int32
+
+	// The number of nodes that should be running the daemon pod and have one
+	// or more of the daemon pod running and ready.
+	NumberReady int32
+
+	// The total number of nodes that are running updated daemon pod
+	// +optional
+	UpdatedNumberScheduled int32
+
+	// The number of nodes that should be running the
+	// daemon pod and have one or more of the daemon pod running and
+	// available (ready for at least spec.minReadySeconds)
+	// +optional
+	NumberAvailable int32
+
+	// The number of nodes that should be running the
+	// daemon pod and have none of the daemon pod running and available
+	// (ready for at least spec.minReadySeconds)
+	// +optional
+	NumberUnavailable int32
+
 }
 
 // +k8s:deepcopy-gen:interfaces=k8s.io/apimachinery/pkg/runtime.Object
