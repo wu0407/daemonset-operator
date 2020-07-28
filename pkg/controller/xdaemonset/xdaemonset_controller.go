@@ -185,7 +185,9 @@ func (r *ReconcileXdaemonset) Reconcile(request reconcile.Request) (reconcile.Re
 		err = r.client.Create(context.TODO(), ds)
 		if err != nil {
 			reqLogger.Error(err, "err in r.client.Create(context.TODO(), ds) 0")
-			return reconcile.Result{}, err
+			if !errors.IsAlreadyExists(err) {
+				return reconcile.Result{}, err
+			}
 		}
 
 		err = r.syncXdaemonsetStatus(instance)
