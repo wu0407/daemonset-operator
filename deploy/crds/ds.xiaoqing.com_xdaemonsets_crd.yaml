@@ -5960,3 +5960,29 @@ spec:
   - name: v1alpha1
     served: true
     storage: true
+
+  additionalPrinterColumns:
+  - name: Desired
+    type: integer
+    description: "The total number of nodes that should be running the daemon pod (including nodes correctly running the daemon pod). More info: https://kubernetes.io/docs/concepts/workloads/controllers/daemonset/"
+    JSONPath: .Status.DesiredNumberScheduled
+  - name: Current
+    type: integer
+    description: "The number of nodes that are running at least 1 daemon pod and are supposed to run the daemon pod. More info: https://kubernetes.io/docs/concepts/workloads/controllers/daemonset/"
+    JSONPath: .Status.CurrentNumberScheduled
+  - name: Ready
+    type: integer
+    description: "The number of nodes that should be running the daemon pod and have one or more of the daemon pod running and ready."
+    JSONPath: .Status.NumberReady
+  - name: Up-to-date
+    type: integer
+    description: "The total number of nodes that are running updated daemon pod"
+    JSONPath: .Status.UpdatedNumberScheduled
+  - name: Available
+    type: integer
+    description: "The number of nodes that should be running the daemon pod and have one or more of the daemon pod running and available (ready for at least spec.minReadySeconds)"
+    JSONPath: .Status.NumberAvailable
+  #- name:
+  #  type: integer
+  #  description: 
+  #  JSONPath:
