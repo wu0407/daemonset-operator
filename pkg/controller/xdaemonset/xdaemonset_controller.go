@@ -1,6 +1,7 @@
 package xdaemonset
 
 import (
+	"fmt"
 	"sort"
 
 	//"strconv"
@@ -189,6 +190,7 @@ func (r *ReconcileXdaemonset) Reconcile(request reconcile.Request) (reconcile.Re
 			}
 		}
 	case leng == 1:
+		fmt.Println("ds count is 1")
 		// daemonset already exists and spec change
 		if !apiequality.Semantic.DeepEqual(dsList.Items[0].Spec, instance.Spec.DaemonSetSpec) {
 
@@ -207,20 +209,17 @@ func (r *ReconcileXdaemonset) Reconcile(request reconcile.Request) (reconcile.Re
 			}
 		}
 	default:
+		fmt.Printf("ds count is %d\n", leng)
 		var dss dsslicetype
 		dss = dsList.Items
 		sort.Sort(dss)
 		//new daemonset is ready
 		if dss[leng-1].Status.DesiredNumberScheduled > 0 && dss[leng-1].Status.NumberReady == dss[leng-1].Status.DesiredNumberScheduled && dss[leng-1].Status.DesiredNumberScheduled == dss[leng-1].Status.CurrentNumberScheduled {
 			//delete all old daemonset
+			fmt.Println("delete all ds")
 			err = r.deleteAllDeamonSet(dss[:leng-1])
 			if err != nil {
 				reqLogger.Error(err, "err in r.client.Delete()")
-				return reconcile.Result{}, err
-			}
-
-			err = r.syncXdaemonsetStatus(instance)
-			if err != nil {
 				return reconcile.Result{}, err
 			}
 		}
