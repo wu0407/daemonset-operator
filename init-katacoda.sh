@@ -3,6 +3,7 @@
 wget https://golang.org/dl/go1.14.6.linux-amd64.tar.gz -O /root/go1.14.6.linux-amd64.tar.gz
 wget https://github.com/operator-framework/operator-sdk/releases/download/v0.17.2/operator-sdk-v0.17.2-x86_64-linux-gnu -O /root/operator-sdk
 cd /root
+chmod +x /root/operator-sdk
 tar xf go1.14.6.linux-amd64.tar.gz
 rm -rf /usr/local/go
 mv /root/go /usr/local/go
