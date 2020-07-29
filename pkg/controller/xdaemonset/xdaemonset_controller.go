@@ -1,7 +1,6 @@
 package xdaemonset
 
 import (
-	"fmt"
 	"sort"
 
 	//"strconv"
@@ -189,13 +188,6 @@ func (r *ReconcileXdaemonset) Reconcile(request reconcile.Request) (reconcile.Re
 				return reconcile.Result{}, err
 			}
 		}
-
-		err = r.syncXdaemonsetStatus(instance)
-		if err != nil {
-			return reconcile.Result{}, err
-		}
-		// daemonset created successfully - don't requeue
-		return reconcile.Result{}, nil
 	case leng == 1:
 		// daemonset already exists and spec change
 		if !apiequality.Semantic.DeepEqual(dsList.Items[0].Spec, instance.Spec.DaemonSetSpec) {
@@ -214,14 +206,6 @@ func (r *ReconcileXdaemonset) Reconcile(request reconcile.Request) (reconcile.Re
 				return reconcile.Result{}, err
 			}
 		}
-		err = r.syncXdaemonsetStatus(instance)
-		if err != nil {
-			return reconcile.Result{}, err
-		}
-
-		//return reconcile.Result{Requeue: true}, nil
-		fmt.Println("equal")
-		return reconcile.Result{}, nil
 	default:
 		var dss dsslicetype
 		dss = dsList.Items
@@ -240,14 +224,13 @@ func (r *ReconcileXdaemonset) Reconcile(request reconcile.Request) (reconcile.Re
 				return reconcile.Result{}, err
 			}
 		}
-
-		err = r.syncXdaemonsetStatus(instance)
-		if err != nil {
-			return reconcile.Result{}, err
-		}
-		//return reconcile.Result{Requeue: true}, nil
-		return reconcile.Result{}, nil
 	}
+
+	err = r.syncXdaemonsetStatus(instance)
+	if err != nil {
+		return reconcile.Result{}, err
+	}
+	return reconcile.Result{}, nil
 
 }
 
