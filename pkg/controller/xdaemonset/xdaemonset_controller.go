@@ -6,7 +6,7 @@ import (
 
 	//"strconv"
 	"context"
-	"reflect"
+	//"reflect"
 
 	dsv1alpha1 "github.com/wu0407/daemonset-operator/pkg/apis/ds/v1alpha1"
 	appsv1 "k8s.io/api/apps/v1"
@@ -369,7 +369,7 @@ func (r *ReconcileXdaemonset) syncXdaemonsetStatus(d *dsv1alpha1.Xdaemonset) err
 	alldss := list.Items
 	newStatus := *caculateStatus(alldss)
 
-	if reflect.DeepEqual(d.Status, newStatus) {
+	if apiequality.Semantic.DeepEqual(d.Status, newStatus) {
 		return nil
 	}
 	//update status
