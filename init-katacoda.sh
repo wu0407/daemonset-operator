@@ -15,6 +15,8 @@ cd daemonset-operator/deploy
 kubectl apply -f role.yaml -f service_account.yaml -f role_binding.yaml -f crds/ds.xiaoqing.com_xdaemonsets_crd.yaml
 
 cd ..
+chmod +x build/bin/*
 /root/operator-sdk build daemonset-operator:v0.1
+cd deploy
 sed -i 's/REPLACE_IMAGE/daemonset-operator:v0.1/' operator.yaml
 kubectl apply -f operator.yaml
