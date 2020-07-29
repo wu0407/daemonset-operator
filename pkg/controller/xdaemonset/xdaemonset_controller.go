@@ -211,7 +211,7 @@ func (r *ReconcileXdaemonset) Reconcile(request reconcile.Request) (reconcile.Re
 		dss = dsList.Items
 		sort.Sort(dss)
 		//new daemonset is ready
-		if dss[leng-1].Status.NumberReady == dss[leng-1].Status.DesiredNumberScheduled && dss[leng-1].Status.DesiredNumberScheduled == dss[leng-1].Status.CurrentNumberScheduled {
+		if dss[leng-1].Status.DesiredNumberScheduled > 0 && dss[leng-1].Status.NumberReady == dss[leng-1].Status.DesiredNumberScheduled && dss[leng-1].Status.DesiredNumberScheduled == dss[leng-1].Status.CurrentNumberScheduled {
 			//delete old daemonset
 			err = r.client.Delete(context.TODO(), &dss[leng-2])
 			if err != nil {
