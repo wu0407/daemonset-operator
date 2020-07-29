@@ -212,10 +212,10 @@ func (r *ReconcileXdaemonset) Reconcile(request reconcile.Request) (reconcile.Re
 		sort.Sort(dss)
 		//new daemonset is ready
 		if dss[leng-1].Status.DesiredNumberScheduled > 0 && dss[leng-1].Status.NumberReady == dss[leng-1].Status.DesiredNumberScheduled && dss[leng-1].Status.DesiredNumberScheduled == dss[leng-1].Status.CurrentNumberScheduled {
-			//delete old daemonset
-			err = r.client.Delete(context.TODO(), &dss[leng-2])
+			//delete all old daemonset
+			err = r.deleteAllDeamonSet(dss[:leng-1])
 			if err != nil {
-				reqLogger.Error(err, "err in r.client.Delete(context.TODO(), &dss[leng - 2])")
+				reqLogger.Error(err, "err in r.client.Delete()")
 				return reconcile.Result{}, err
 			}
 
@@ -456,4 +456,16 @@ func getAllNumberUnavailable(alldss []appsv1.DaemonSet) int32 {
 	}
 
 	return count
+}
+
+//deleteAllDeamonSet delete all special daemonset return err if delete failed
+func (r *ReconcileXdaemonset) deleteAllDeamonSet(alldss []appsv1.DaemonSet) error {
+	for _, ds := range alldss {
+		err := r.client.Delete(context.TODO(), &ds)
+		if err != nil {
+			return err
+		}
+	}
+
+	return nil
 }
