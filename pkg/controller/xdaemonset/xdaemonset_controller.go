@@ -165,10 +165,6 @@ func (r *ReconcileXdaemonset) Reconcile(request reconcile.Request) (reconcile.Re
 		return reconcile.Result{}, err
 	}
 
-	if dsList == nil {
-		return reconcile.Result{}, nil
-	}
-
 	leng := len(dsList.Items)
 	switch {
 	case leng == 0:
@@ -225,8 +221,10 @@ func (r *ReconcileXdaemonset) Reconcile(request reconcile.Request) (reconcile.Re
 		}
 	}
 
+	fmt.Println("start sync status")
 	err = r.syncXdaemonsetStatus(instance)
 	if err != nil {
+		fmt.Printf("sync status err %s\n", err)
 		return reconcile.Result{}, err
 	}
 	return reconcile.Result{}, nil
