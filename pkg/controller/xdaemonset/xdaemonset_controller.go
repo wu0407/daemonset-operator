@@ -372,6 +372,7 @@ func (r *ReconcileXdaemonset) syncXdaemonsetStatus(d *dsv1alpha1.Xdaemonset) err
 	if apiequality.Semantic.DeepEqual(d.Status, newStatus) {
 		return nil
 	}
+	d.Status = newStatus
 	//update status
 	return r.client.Status().Update(context.TODO(), d)
 }
