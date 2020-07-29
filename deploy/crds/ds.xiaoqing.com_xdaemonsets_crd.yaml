@@ -5965,24 +5965,28 @@ spec:
   - name: Desired
     type: integer
     description: "The total number of nodes that should be running the daemon pod (including nodes correctly running the daemon pod). More info: https://kubernetes.io/docs/concepts/workloads/controllers/daemonset/"
-    JSONPath: .Status.DesiredNumberScheduled
+    JSONPath: .status.desiredNumberScheduled
   - name: Current
     type: integer
     description: "The number of nodes that are running at least 1 daemon pod and are supposed to run the daemon pod. More info: https://kubernetes.io/docs/concepts/workloads/controllers/daemonset/"
-    JSONPath: .Status.CurrentNumberScheduled
+    JSONPath: .status.currentNumberScheduled
   - name: Ready
     type: integer
     description: "The number of nodes that should be running the daemon pod and have one or more of the daemon pod running and ready."
-    JSONPath: .Status.NumberReady
+    JSONPath: .status.numberReady
   - name: Up-to-date
     type: integer
     description: "The total number of nodes that are running updated daemon pod"
-    JSONPath: .Status.UpdatedNumberScheduled
+    JSONPath: .status.updatedNumberScheduled
   - name: Available
     type: integer
     description: "The number of nodes that should be running the daemon pod and have one or more of the daemon pod running and available (ready for at least spec.minReadySeconds)"
-    JSONPath: .Status.NumberAvailable
-  #- name:
-  #  type: integer
-  #  description: 
-  #  JSONPath:
+    JSONPath: .status.numberAvailable
+  - name: Node Selector
+    type: string
+    description: "NodeSelector is a selector which must be true for the pod to fit on a node. Selector which must match a node's labels for the pod to be scheduled on that node. More info: https://kubernetes.io/docs/concepts/configuration/assign-pod-node/"
+    JSONPath: .spec.template.spec.nodeSelector
+  - name: Age
+    type: date
+    description: "CreationTimestamp is a timestamp representing the server time when this object was created. It is not guaranteed to be set in happens-before order across separate operations. Clients may not set this value. It is represented in RFC3339 form and is in UTC.\n\nPopulated by the system. Read-only. Null for lists. More info: https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#metadata"
+    JSONPath: .metadata.creationTimestamp
